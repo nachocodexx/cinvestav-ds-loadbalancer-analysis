@@ -27,7 +27,7 @@ if __name__ == '__main__':
         L.basicConfig(filename="output.log",format=FORMAT,level=L.DEBUG)
         #
         GENERATOR_PATH  = "{}/bins/generator".format(os.getcwd())
-        SAMPLES         = str(os.environ.get("TRACE_SAMPLES", 1000))
+        SAMPLES         = str(os.environ.get("TRACE_SAMPLES", 10000))
         SIZE            = str(os.environ.get("TRACE_SIZE", 500))
         INTER_ARRIVAL   = str(os.environ.get("TRACE_INTER_ARRIVAL", 1))
         READ_RATIO      = str(os.environ.get("TRACE_READ_RATIO", 80))
@@ -44,8 +44,9 @@ if __name__ == '__main__':
         LOAD_BALANCER   = int(os.environ.get("LOAD_BALANCER",0))
         SERVICE_TIME    = int(os.environ.get("SERVICE_TIME",1000))
         NUM_DELAYS      = int(os.environ.get("NUM_DELAYS",10))
-        RESULT_FILENAME = str(os.environ.get("RESULT_PATH","prueba_00.csv"))
+        RESULT_FILENAME = str(os.environ.get("RESULT_FILENAME","prueba_00.csv"))
         RESULT_PATH     = "./results/{}".format(RESULT_FILENAME)
+        TEST_ID         = int(os.environ.get("TEST_ID",0))
 
         # Spawn workers.
         spawner(workers=WORKERS,name=WORKERS_NAME,base_port=WORKERS_PORT)
@@ -55,26 +56,32 @@ if __name__ == '__main__':
         _data = {'data':data,'workers':WORKERS,'loadBalancer':LOAD_BALANCER,'basePort':WORKERS_PORT}
         with socket(AF_INET,SOCK_STREAM) as S:
             S.connect((HOST,PORT))
+            #S.setblocking(0)
+            #print("HERE")
             S.sendall('{}\n'.format(json.dumps(_data)).encode("utf-8"))
             response = U.readAll(S)
             response = json.loads(response)
             response = list(map(U.unpackBins,response))
             with open(RESULT_PATH,'a') as f:
                 for index,node in enumerate(response):
-                    avgInterArrival = U.getAvgInterArrival(node['bins'])
+                    balls           = node['bins']
+                    avgInterArrival = U.getAvgInterArrival(balls)
                     data            = {'avgInterArrival':avgInterArrival,'serviceTime':SERVICE_TIME,'numDelays':NUM_DELAYS}
                     _node           = node['node']
                     port            = int(_node['port'])
                     host            = _node['url']
                     print("Node on port {}:{}".format(host,port))
+                    print('_'*20)
                     name = '{}-{}'.format(WORKERS_NAME,index)
                     with socket(AF_INET,SOCK_STREAM) as SS:
                         SS.connect((host,port))
                         SS.sendall('{}\n'.format(json.dumps(data)).encode('utf-8'))
-                        res = U.readAll(SS)
-                        f.write('{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n'.format(name,WORKERS,U.loadBalancerToStr(LOAD_BALANCER),res,SAMPLES,SIZE,INTER_ARRIVAL,READ_RATIO,SAS_SIZE,U.distributionToStr(DISTRIBUTION), MEAN,STD,CONCURRENCY,SERVICE_TIME,NUM_DELAYS))
-                        #L.info("SEND DATA TO NODE on {}:{}".format(host,port))
-                    time.sleep(1)
+                        res  = U.readAll(SS)
+                        _res = list(map(lambda x:float(x),res.split(',')))
+                        print("NUM. REQUESTS: {}\nAVG.INTERARRIVAL: {} sec\nSERVICE TIME: {} sec\nAVG. DELAY IN QUEUE: {} sec\nNUM. IN QUEUE: {}\nSERVER UTILIZATION:{}%\nSIMULATION TIME: {} sec".format(len(balls),avgInterArrival/1000,SERVICE_TIME/1000,_res[0]/1000,_res[1],_res[2]*100,_res[3]/1000))
+                        print('_'*20)
+                        f.write('{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n'.format(name,WORKERS,U.loadBalancerToStr(LOAD_BALANCER),res,SAMPLES,SIZE,INTER_ARRIVAL,READ_RATIO,SAS_SIZE,U.distributionToStr(DISTRIBUTION), MEAN,STD,CONCURRENCY,SERVICE_TIME,NUM_DELAYS,TEST_ID))
+                    time.sleep(.5)
     except Exception as e:
         print(e)
         L.error("{}".format(e))

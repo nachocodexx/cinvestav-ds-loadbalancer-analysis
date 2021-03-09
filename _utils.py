@@ -40,8 +40,14 @@ class Utils:
     def readAll(sock):
         data = ''
         BUFF_SIZE = 4096
-        while True:
-            _data = sock.recv(BUFF_SIZE)
-            data += _data.decode('ascii')
-            if(len(_data)<BUFF_SIZE):
-                return data
+        try:
+            sock.settimeout(1)
+            while True:
+                _data = sock.recv(BUFF_SIZE)
+                _dataLen = len(_data)
+                if(not _data):
+                    return data
+                else:
+                    data += _data.decode('ascii')
+        except Exception as e:
+            return data
