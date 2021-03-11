@@ -52,21 +52,23 @@ if __name__ == '__main__':
         spawner(workers=WORKERS,name=WORKERS_NAME,base_port=WORKERS_PORT)
         # Process trace.
         data  = processTrace() 
+        data  = list(map(lambda x: x/1000,data))
         # Load balancer data. 
         _data = {'data':data,'workers':WORKERS,'loadBalancer':LOAD_BALANCER,'basePort':WORKERS_PORT}
         with socket(AF_INET,SOCK_STREAM) as S:
             S.connect((HOST,PORT))
-            #S.setblocking(0)
-            #print("HERE")
             S.sendall('{}\n'.format(json.dumps(_data)).encode("utf-8"))
             response = U.readAll(S)
             response = json.loads(response)
             response = list(map(U.unpackBins,response))
+            #print(response)
             with open(RESULT_PATH,'a') as f:
                 for index,node in enumerate(response):
                     balls           = node['bins']
+                    ballsLen        = len(balls)
                     avgInterArrival = U.getAvgInterArrival(balls)
-                    data            = {'avgInterArrival':avgInterArrival,'serviceTime':SERVICE_TIME,'numDelays':NUM_DELAYS}
+                    ND              = ballsLen
+                    data            = {'avgInterArrival':avgInterArrival,'serviceTime':SERVICE_TIME,'numDelays':ND}
                     _node           = node['node']
                     port            = int(_node['port'])
                     host            = _node['url']
@@ -76,11 +78,27 @@ if __name__ == '__main__':
                     with socket(AF_INET,SOCK_STREAM) as SS:
                         SS.connect((host,port))
                         SS.sendall('{}\n'.format(json.dumps(data)).encode('utf-8'))
-                        res  = U.readAll(SS)
-                        _res = list(map(lambda x:float(x),res.split(',')))
+                        res               = U.readAll(SS)
+                        _res              = list(map(lambda x:float(x),res.split(',')))
+                        loadBalancerStr   = U.loadBalancerToStr(LOAD_BALANCER)
+                        distributionToStr = U.distributionToStr(DISTRIBUTION)
+                        csvText = [name,ballsLen,
+                                WORKERS,loadBalancerStr,
+                                res,SAMPLES,
+                                SIZE,INTER_ARRIVAL,
+                                READ_RATIO,SAS_SIZE,
+                                distributionToStr,MEAN,
+                                STD,CONCURRENCY,
+                                SERVICE_TIME,avgInterArrival,ND,
+                                TEST_ID]
+                        csvText = list(map(lambda x:str(x),csvText))
+                        csvText = ','.join(csvText)
+
+
+
                         print("NUM. REQUESTS: {}\nAVG.INTERARRIVAL: {} sec\nSERVICE TIME: {} sec\nAVG. DELAY IN QUEUE: {} sec\nNUM. IN QUEUE: {}\nSERVER UTILIZATION:{}%\nSIMULATION TIME: {} sec".format(len(balls),avgInterArrival/1000,SERVICE_TIME/1000,_res[0]/1000,_res[1],_res[2]*100,_res[3]/1000))
                         print('_'*20)
-                        f.write('{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n'.format(name,WORKERS,U.loadBalancerToStr(LOAD_BALANCER),res,SAMPLES,SIZE,INTER_ARRIVAL,READ_RATIO,SAS_SIZE,U.distributionToStr(DISTRIBUTION), MEAN,STD,CONCURRENCY,SERVICE_TIME,NUM_DELAYS,TEST_ID))
+                        f.write(csvText+"\n")
                     time.sleep(.5)
     except Exception as e:
         print(e)
